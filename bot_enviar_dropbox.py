@@ -217,7 +217,7 @@ async def upload_dropbox(
         }
 
 
-@app.post("/collect_and_upload")
+@app.api_route("/collect_and_upload", methods=["GET", "POST"])
 async def collect_and_upload():
     # combina coletar_links + upload_dropbox
     if DISCORD_TOKEN is None:
