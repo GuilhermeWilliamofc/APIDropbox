@@ -2,7 +2,7 @@ import os
 import asyncio
 import discord
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 
 # Token via variável de ambiente (não comitar token no código)
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -171,15 +171,39 @@ async def trigger_collect():
 
 
 @app.get("/links")
-async def get_links():
+async def get_links(refresh: bool = False):
     path = "links_dos_arquivos.html"
+
+    # opcional: forçar coleta antes de servir (use /links?refresh=true)
+    if refresh:
+        if TOKEN is None:
+            raise HTTPException(
+                status_code=500, detail="DISCORD_TOKEN não definido no ambiente"
+            )
+        if not client.is_ready():
+            raise HTTPException(
+                status_code=503,
+                detail="Bot Discord não está conectado ainda. Aguarde inicialização.",
+            )
+        if _collect_lock.locked():
+            return JSONResponse(
+                {"status": "busy", "detail": "Coleta já em execução"}, status_code=202
+            )
+        async with _collect_lock:
+            try:
+                await coletar_links()
+            except Exception as e:
+                print(f"Erro na coleta durante refresh: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
     if os.path.exists(path):
-        return FileResponse(
-            path, media_type="text/html", filename="links_dos_arquivos.html"
-        )
+        # retorna HTML inline no browser (sem forçar download)
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return HTMLResponse(content=content, status_code=200)
     raise HTTPException(
         status_code=404,
-        detail="Arquivo HTML não encontrado. Execute /collect primeiro.",
+        detail="Arquivo HTML não encontrado. Execute /collect ou /links?refresh=true primeiro.",
     )
 
 
