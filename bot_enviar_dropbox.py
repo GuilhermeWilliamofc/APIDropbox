@@ -5,14 +5,21 @@ import discord
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 import dropbox
+import requests
 
 # Tokens via variáveis de ambiente (não comitar tokens no código)
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-DROPBOX_TOKEN = os.getenv("DROPBOX_TOKEN")
+
+# Dropbox App info + Refresh token (definidos no ambiente)
+DROPBOX_APP_KEY = os.getenv("DROPBOX_APP_KEY")
+DROPBOX_APP_SECRET = os.getenv("DROPBOX_APP_SECRET")
+DROPBOX_REFRESH_TOKEN = os.getenv("DROPBOX_REFRESH_TOKEN")
+
 if not DISCORD_TOKEN:
     print("⚠️ DISCORD_TOKEN não definido. O bot Discord não será conectado.")
-if not DROPBOX_TOKEN:
-    print("⚠️ DROPBOX_TOKEN não definido. Endpoint de upload Dropbox falhará sem token.")
+
+if not DROPBOX_APP_KEY or not DROPBOX_APP_SECRET or not DROPBOX_REFRESH_TOKEN:
+    print("⚠️ Variáveis do Dropbox ausentes. Endpoint de upload Dropbox falhará sem elas.")
 
 IGNORAR_CATEGORIAS = [
     "╭╼ 🌐Uploader Mode",
@@ -35,6 +42,25 @@ _collect_lock = asyncio.Lock()
 
 def limpar_nome(nome):
     return nome.replace("/", "-").replace("\\", "-").replace(":", "-")
+
+# 🔹 Função para gerar access token usando refresh token
+def obter_access_token():
+    if not all([DROPBOX_APP_KEY, DROPBOX_APP_SECRET, DROPBOX_REFRESH_TOKEN]):
+        raise RuntimeError("Variáveis do Dropbox não definidas corretamente.")
+
+    url = "https://api.dropbox.com/oauth2/token"
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": DROPBOX_REFRESH_TOKEN,
+        "client_id": DROPBOX_APP_KEY,
+        "client_secret": DROPBOX_APP_SECRET
+    }
+    resp = requests.post(url, data=data)
+    resp.raise_for_status()
+    access_token = resp.json().get("access_token")
+    if not access_token:
+        raise RuntimeError("Falha ao obter access token do Dropbox")
+    return access_token
 
 
 async def coletar_links():
@@ -178,9 +204,9 @@ async def upload_dropbox(
     path_local: str = "links_dos_arquivos.html",
     caminho_dropbox: str = "/links_dos_arquivos.html",
 ):
-    if DROPBOX_TOKEN is None:
+    if not all([DROPBOX_APP_KEY, DROPBOX_APP_SECRET, DROPBOX_REFRESH_TOKEN]):
         raise HTTPException(
-            status_code=500, detail="DROPBOX_TOKEN não definido no ambiente"
+            status_code=500, detail="Configuração do Dropbox incompleta"
         )
 
     if not os.path.exists(path_local):
@@ -189,7 +215,8 @@ async def upload_dropbox(
         )
 
     try:
-        dbx = dropbox.Dropbox(DROPBOX_TOKEN)
+        access_token = obter_access_token()
+        dbx = dropbox.Dropbox(access_token)
         with open(path_local, "rb") as f:
             dbx.files_upload(
                 f.read(), caminho_dropbox, mode=dropbox.files.WriteMode.overwrite
@@ -280,21 +307,18 @@ async def shutdown_event():
 # Roda o bot para gerar o arquivo txt
 subprocess.run(["python", "bot_list_links.py"], check=True)
 
-# Faz upload pro Dropbox (TOKEN)
-dbx = dropbox.Dropbox(
-    DROPBOX_TOKEN
-)
-
+# Faz upload pro Dropbox usando refresh token
 arquivo_local = "links_dos_arquivos.html"
 caminho_dropbox = "/links_dos_arquivos.html"
 
-with open(arquivo_local, "rb") as f:
-    dbx.files_upload(f.read(), caminho_dropbox, mode=dropbox.files.WriteMode.overwrite)
-
-print("✅ Upload concluído para o Dropbox!")
-
-# Tenta pegar link existente (sem precisar criar)
 try:
+    access_token = obter_access_token()
+    dbx = dropbox.Dropbox(access_token)
+    with open(arquivo_local, "rb") as f:
+        dbx.files_upload(f.read(), caminho_dropbox, mode=dropbox.files.WriteMode.overwrite)
+    print("✅ Upload concluído para o Dropbox!")
+
+    # Tenta pegar link existente
     links = dbx.sharing_list_shared_links(path=caminho_dropbox).links
     if links:
         link = links[0].url
@@ -302,5 +326,5 @@ try:
     else:
         print("ℹ️ Nenhum link encontrado — crie um manualmente no Dropbox.")
 except Exception as e:
-    print("⚠️ Não foi possível listar links. Provável limitação de permissões.")
-    print("   Basta criar o link manualmente no Dropbox uma vez.")
+    print("⚠️ Erro no upload Dropbox:", e)
+    print("   Verifique se as variáveis de ambiente estão corretas ou se há permissão.")
