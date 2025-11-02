@@ -19,9 +19,7 @@ if not DISCORD_TOKEN:
     print("⚠️ DISCORD_TOKEN não definido. O bot Discord não será conectado.")
 
 if not DROPBOX_APP_KEY or not DROPBOX_APP_SECRET or not DROPBOX_REFRESH_TOKEN:
-    print(
-        "⚠️ Variáveis do Dropbox ausentes. Endpoint de upload Dropbox falhará sem elas."
-    )
+    print("⚠️ Variáveis do Dropbox ausentes. Endpoint de upload Dropbox falhará sem elas.")
 
 IGNORAR_CATEGORIAS = [
     "╭╼ 🌐Uploader Mode",
@@ -45,7 +43,6 @@ _collect_lock = asyncio.Lock()
 def limpar_nome(nome):
     return nome.replace("/", "-").replace("\\", "-").replace(":", "-")
 
-
 # 🔹 Função para gerar access token usando refresh token
 def obter_access_token():
     if not all([DROPBOX_APP_KEY, DROPBOX_APP_SECRET, DROPBOX_REFRESH_TOKEN]):
@@ -56,7 +53,7 @@ def obter_access_token():
         "grant_type": "refresh_token",
         "refresh_token": DROPBOX_REFRESH_TOKEN,
         "client_id": DROPBOX_APP_KEY,
-        "client_secret": DROPBOX_APP_SECRET,
+        "client_secret": DROPBOX_APP_SECRET
     }
     resp = requests.post(url, data=data)
     resp.raise_for_status()
@@ -117,66 +114,12 @@ async def coletar_links():
 
 def gerar_html_audios(input_txt, output_txt):
     html_output = [
-        '<!doctype html>\n<html lang="pt-br">\n<head>\n<meta charset="utf-8">\n'
-        '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
-        "<title>Links de Áudios</title>\n"
-        "<style>\n"
-        "body{font-family:Arial,Helvetica,sans-serif;padding:16px}\n"
-        "button{margin:0;padding:8px 12px;border-radius:20px;border:2px solid #333;background:#f5f5f5}\n"
-        ".album-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}\n"
-        ".album-block{margin-bottom:14px}\n"
-        ".album-content{padding-left:8px;border-left:2px solid #ddd}\n"
-        ".track{margin:8px 0}\n"
-        ".track a{margin-left:8px;font-size:90%}\n"
-        ".status{font-size:90%;color:#800;margin-left:8px}\n"
-        "</style>\n"
         "<script>\n"
-        "function loadScript(url){\n"
-        "  return new Promise((resolve,reject)=>{\n"
-        "    const s=document.createElement('script'); s.src=url; s.async=true;\n"
-        "    s.onload=()=>resolve(); s.onerror=(e)=>reject(e);\n    document.head.appendChild(s);\n"
-        "  });\n"
-        "}\n\n"
         "function toggleAlbum(id) {\n"
-        "  const div = document.getElementById(id);\n        if(!div) return;\n"
-        "  div.style.display = (div.style.display === 'none' || div.style.display==='') ? 'block' : 'none';\n"
-        "}\n\n"
-        "function filterAlbums() {\n"
-        "  const q = document.getElementById('search').value.toLowerCase().trim();\n"
-        "  document.querySelectorAll('.album-block').forEach(b => {\n"
-        "    const name = (b.dataset.album || '').toLowerCase();\n"
-        "    b.style.display = (!q || name.includes(q)) ? 'block' : 'none';\n"
-        "  });\n"
-        "}\n\n"
-        "async function ensureLibs(){\n"
-        "  const promises = [];\n"
-        "  if(typeof JSZip === 'undefined') promises.push(loadScript('https://cdn.jsdelivr.net/npm/jszip@3.10.0/dist/jszip.min.js'));\n"
-        "  if(typeof saveAs === 'undefined') promises.push(loadScript('https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js'));\n"
-        "  if(promises.length===0) return true;\n"
-        "  try{ await Promise.all(promises); return (typeof JSZip !== 'undefined' && typeof saveAs !== 'undefined'); }\n"
-        "  catch(e){ console.error('Erro carregando libs:', e); return false; }\n"
-        "}\n\n"
-        "function setStatus(id, msg){\n"
-        "  const el = document.getElementById('status-'+id);\n"
-        "  if(el) el.textContent = msg;\n}\n\n"
-        "async function downloadAlbum(id, btn) {\n"
-        "  btn = btn || this;\n  setStatus(id, 'Iniciando...');\n"
-        "  const ok = await ensureLibs();\n  if(!ok){ alert('Não foi possível carregar bibliotecas (JSZip/FileSaver). Abra via servidor HTTP ou verifique internet.'); setStatus(id,'Erro: libs não carregadas'); return; }\n"
-        "  const div = document.getElementById(id);\n  if(!div){ alert('Álbum não encontrado'); return; }\n  const sources = Array.from(div.querySelectorAll('audio source')).map((s,i)=>({url:s.src, idx:i+1})).filter(s=>s.url);\n  if(sources.length===0){ alert('Nenhuma faixa encontrada neste álbum.'); setStatus(id,'Nenhuma faixa'); return; }\n"
-        "  if(!confirm('Baixar ' + sources.length + ' arquivos como ZIP?')) { setStatus(id,'Cancelado pelo usuário'); return; }\n"
-        "  btn.disabled = true; const originalText = btn.textContent; btn.textContent = 'Preparando...';\n"
-        "  const zip = new JSZip();\n  let added = 0;\n  for(let i=0;i<sources.length;i++){\n"
-        "    const url = sources[i].url;\n    try{\n"
-        "      btn.textContent = `Baixando ${i+1}/${sources.length}...`;\n      console.log('fetch', url);\n"
-        "      const resp = await fetch(url);\n      if(!resp.ok){ console.error('fetch failed', url, resp.status); continue; }\n"
-        "      const blob = await resp.blob();\n        // ignora blobs vazios\n        if(!blob || blob.size===0){ console.warn('blob vazio', url); continue; }\n"
-        "      let name = url.split('/').pop().split('?')[0] || `track_${i+1}`;\n        name = decodeURIComponent(name);\n      zip.file(name, blob);\n      added++;\n    }catch(err){\n      console.error('Erro fetch', url, err);\n    }\n  }\n"
-        "  if(added===0){ alert('Nenhum arquivo foi baixado. Possível bloqueio por CORS ou links inválidos. Verifique no console.'); setStatus(id,'Falha: nenhum arquivo baixado'); btn.disabled=false; btn.textContent=originalText; return; }\n"
-        "  btn.textContent = 'Criando ZIP...'; setStatus(id,'Criando ZIP...');\n"
-        "  try{\n"
-        "    const content = await zip.generateAsync({type:'blob'});\n    saveAs(content, id + '.zip');\n    setStatus(id,'Download do ZIP iniciado');\n  }catch(err){\n    console.error('Erro ao gerar ZIP', err); alert('Erro ao gerar ZIP: '+err); setStatus(id,'Erro ao gerar ZIP');\n  }\n  btn.disabled = false; btn.textContent = originalText;\n}\n</script>\n</head>\n<body>\n"
-        "<h1>Álbuns e Faixas</h1>\n"
-        '<input id="search" type="search" placeholder="Buscar álbum..." oninput="filterAlbums()" style="width:100%;padding:8px;margin-bottom:12px">\n\n'
+        "  const div = document.getElementById(id);\n"
+        "  div.style.display = div.style.display === 'none' ? 'block' : 'none';\n"
+        "}\n"
+        "</script>\n\n"
     ]
     artista_album = None
     album_id = 1
@@ -188,19 +131,13 @@ def gerar_html_audios(input_txt, output_txt):
     for linha in linhas:
         if linha.startswith("#"):
             if artista_album is not None:
-                html_output.append("  </div>\n</div>\n\n")
+                html_output.append("</div>\n\n")
             artista_album = linha[1:].strip()
             div_id = f"album{album_id}"
-            safe_album = artista_album.replace('"', "'")
             html_output.append(
-                f'<div class="album-block" data-album="{safe_album}">\n'
-                f'  <div class="album-row">\n'
-                f"    <button onclick=\"toggleAlbum('{div_id}')\">Mostrar/Ocultar {safe_album}</button>\n"
-                f"    <button onclick=\"downloadAlbum('{div_id}', this)\">Baixar álbum</button>\n"
-                f'    <span id="status-{div_id}" class="status"></span>\n'
-                f"  </div>\n"
-                f'  <div id="{div_id}" class="album-content" style="display:none;padding-left:8px;border-left:2px solid #ddd;margin-bottom:12px">\n'
-                f"    <h2>{safe_album}</h2>\n"
+                f"<button onclick=\"toggleAlbum('{div_id}')\">Mostrar/Ocultar {artista_album}</button><br>\n"
+                f'<div id="{div_id}" style="display:none;">\n'
+                f"<h2>{artista_album}</h2>\n"
             )
             album_id += 1
             faixa_num = 1
@@ -210,32 +147,20 @@ def gerar_html_audios(input_txt, output_txt):
                 nome_com_extensao = link.split("/")[-1]
                 if "." in nome_com_extensao:
                     nome_arquivo = nome_com_extensao.rsplit(".", 1)[0]
-                    ext = nome_com_extensao.rsplit(".", 1)[1]
                 else:
                     nome_arquivo = nome_com_extensao
-                    ext = ""
             else:
                 nome_arquivo = f"Faixa {faixa_num}"
-                ext = ""
 
-            safe_title = nome_arquivo.replace('"', "'")
-            # adiciona link direto para testar em nova aba e crossorigin no audio
-            bloco_html = (
-                f'<div class="track" data-title="{safe_title}">\n'
-                f'  <p>{nome_arquivo} <a href="{link}" target="_blank" rel="noopener noreferrer">abrir</a></p>\n'
-                f'  <audio controls preload="none" crossorigin="anonymous">\n'
-                f'    <source src="{link}" type="audio/{ext if ext else "mpeg"}">\n'
-                f"    Seu navegador não suporta o elemento de áudio.\n"
-                f"  </audio>\n"
-                f"</div>\n"
-            )
+            bloco_html = f"""<p>{nome_arquivo}</p>
+<audio controls preload="none">
+    <source src="{link}" type="audio/ogg; codecs=opus">
+</audio>\n"""
             html_output.append(bloco_html)
             faixa_num += 1
 
     if artista_album is not None:
-        html_output.append("  </div>\n</div>\n")
-
-    html_output.append("\n</body>\n</html>\n")
+        html_output.append("</div>\n")
 
     with open(output_txt, "w", encoding="utf-8") as file:
         file.writelines(html_output)
@@ -390,9 +315,7 @@ try:
     access_token = obter_access_token()
     dbx = dropbox.Dropbox(access_token)
     with open(arquivo_local, "rb") as f:
-        dbx.files_upload(
-            f.read(), caminho_dropbox, mode=dropbox.files.WriteMode.overwrite
-        )
+        dbx.files_upload(f.read(), caminho_dropbox, mode=dropbox.files.WriteMode.overwrite)
     print("✅ Upload concluído para o Dropbox!")
 
     # Tenta pegar link existente
