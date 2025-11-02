@@ -19,7 +19,9 @@ if not DISCORD_TOKEN:
     print("⚠️ DISCORD_TOKEN não definido. O bot Discord não será conectado.")
 
 if not DROPBOX_APP_KEY or not DROPBOX_APP_SECRET or not DROPBOX_REFRESH_TOKEN:
-    print("⚠️ Variáveis do Dropbox ausentes. Endpoint de upload Dropbox falhará sem elas.")
+    print(
+        "⚠️ Variáveis do Dropbox ausentes. Endpoint de upload Dropbox falhará sem elas."
+    )
 
 IGNORAR_CATEGORIAS = [
     "╭╼ 🌐Uploader Mode",
@@ -43,6 +45,7 @@ _collect_lock = asyncio.Lock()
 def limpar_nome(nome):
     return nome.replace("/", "-").replace("\\", "-").replace(":", "-")
 
+
 # 🔹 Função para gerar access token usando refresh token
 def obter_access_token():
     if not all([DROPBOX_APP_KEY, DROPBOX_APP_SECRET, DROPBOX_REFRESH_TOKEN]):
@@ -53,7 +56,7 @@ def obter_access_token():
         "grant_type": "refresh_token",
         "refresh_token": DROPBOX_REFRESH_TOKEN,
         "client_id": DROPBOX_APP_KEY,
-        "client_secret": DROPBOX_APP_SECRET
+        "client_secret": DROPBOX_APP_SECRET,
     }
     resp = requests.post(url, data=data)
     resp.raise_for_status()
@@ -114,12 +117,62 @@ async def coletar_links():
 
 def gerar_html_audios(input_txt, output_txt):
     html_output = [
+        '<!doctype html>\n<html lang="pt-br">\n<head>\n<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
+        "<title>Links de Áudios</title>\n"
+        "<style>\n"
+        "body{font-family:Arial,Helvetica,sans-serif;padding:16px}\n"
+        "button{margin:6px 4px}\n        "
+        ".track{margin:8px 0}\n"
+        "</style>\n"
+        # incluir JSZip e FileSaver via CDN
+        '<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.0/dist/jszip.min.js"></script>\n'
+        '<script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>\n'
         "<script>\n"
         "function toggleAlbum(id) {\n"
         "  const div = document.getElementById(id);\n"
         "  div.style.display = div.style.display === 'none' ? 'block' : 'none';\n"
-        "}\n"
-        "</script>\n\n"
+        "}\n\n"
+        "function filterTracks() {\n"
+        "  const q = document.getElementById('search').value.toLowerCase();\n"
+        "  document.querySelectorAll('.track').forEach(t => {\n"
+        "    const txt = t.dataset.title.toLowerCase();\n"
+        "    t.style.display = txt.includes(q) ? 'block' : 'none';\n"
+        "  });\n"
+        "}\n\n"
+        "async function downloadAlbum(id, btn) {\n"
+        "  const div = document.getElementById(id);\n"
+        "  const tracks = Array.from(div.querySelectorAll('audio source')).map(s=>s.src);\n"
+        "  if(tracks.length===0){alert('Nenhuma faixa encontrada neste álbum.');return}\n"
+        "  if(!confirm('Baixar ' + tracks.length + ' arquivos como ZIP?')) return;\n"
+        "  btn.disabled = true; const originalText = btn.textContent; btn.textContent = 'Preparando...';\n"
+        "  const zip = new JSZip();\n"
+        "  for(let i=0;i<tracks.length;i++){\n"
+        "    const url = tracks[i];\n"
+        "    try{\n"
+        "      btn.textContent = `Baixando ${i+1}/${tracks.length}...`;\n"
+        "      const resp = await fetch(url);\n"
+        "      if(!resp.ok) throw new Error('Falha ao baixar: '+resp.status);\n"
+        "      const blob = await resp.blob();\n"
+        "      // tenta extrair nome do arquivo da URL\n"
+        "      let name = url.split('/').pop().split('?')[0];\n"
+        "      if(!name) name = `track_${i+1}`;\n"
+        "      zip.file(name, blob);\n"
+        "    }catch(err){\n"
+        "      console.error('Erro fetch', url, err);\n      alert('Erro ao baixar alguns arquivos. Verifique CORS ou tente baixar manualmente.');\n"
+        "    }\n"
+        "  }\n"
+        "  btn.textContent = 'Criando ZIP...';\n"
+        "  try{\n"
+        "    const content = await zip.generateAsync({type:'blob'});\n"
+        "    saveAs(content, id + '.zip');\n"
+        "  }catch(err){\n"
+        "    console.error('Erro ao gerar ZIP', err); alert('Erro ao gerar ZIP: '+err);\n"
+        "  }\n"
+        "  btn.disabled = false; btn.textContent = originalText;\n"
+        "}\n</script>\n</head>\n<body>\n"
+        "<h1>Álbuns e Faixas</h1>\n"
+        '<input id="search" type="search" placeholder="Buscar música..." oninput="filterTracks()" style="width:100%;padding:8px;margin-bottom:12px">\n\n'
     ]
     artista_album = None
     album_id = 1
@@ -135,8 +188,9 @@ def gerar_html_audios(input_txt, output_txt):
             artista_album = linha[1:].strip()
             div_id = f"album{album_id}"
             html_output.append(
-                f"<button onclick=\"toggleAlbum('{div_id}')\">Mostrar/Ocultar {artista_album}</button><br>\n"
-                f'<div id="{div_id}" style="display:none;">\n'
+                f"<button onclick=\"toggleAlbum('{div_id}')\">Mostrar/Ocultar {artista_album}</button>\n"
+                f"<button onclick=\"downloadAlbum('{div_id}', this)\">Baixar álbum</button>\n"
+                f'<div id="{div_id}" style="display:none;padding-left:8px;border-left:2px solid #ddd;margin-bottom:12px">\n'
                 f"<h2>{artista_album}</h2>\n"
             )
             album_id += 1
@@ -147,20 +201,30 @@ def gerar_html_audios(input_txt, output_txt):
                 nome_com_extensao = link.split("/")[-1]
                 if "." in nome_com_extensao:
                     nome_arquivo = nome_com_extensao.rsplit(".", 1)[0]
+                    ext = nome_com_extensao.rsplit(".", 1)[1]
                 else:
                     nome_arquivo = nome_com_extensao
+                    ext = ""
             else:
                 nome_arquivo = f"Faixa {faixa_num}"
+                ext = ""
 
-            bloco_html = f"""<p>{nome_arquivo}</p>
-<audio controls preload="none">
-    <source src="{link}" type="audio/ogg; codecs=opus">
-</audio>\n"""
+            safe_title = nome_arquivo.replace('"', "'")
+            bloco_html = (
+                f'<div class="track" data-title="{safe_title}">\n'
+                f"  <p>{nome_arquivo}</p>\n"
+                f'  <audio controls preload="none">\n'
+                f'    <source src="{link}" type="audio/{ext if ext else "mpeg"}">\n'
+                f"  </audio>\n"
+                f"</div>\n"
+            )
             html_output.append(bloco_html)
             faixa_num += 1
 
     if artista_album is not None:
         html_output.append("</div>\n")
+
+    html_output.append("\n</body>\n</html>\n")
 
     with open(output_txt, "w", encoding="utf-8") as file:
         file.writelines(html_output)
@@ -315,7 +379,9 @@ try:
     access_token = obter_access_token()
     dbx = dropbox.Dropbox(access_token)
     with open(arquivo_local, "rb") as f:
-        dbx.files_upload(f.read(), caminho_dropbox, mode=dropbox.files.WriteMode.overwrite)
+        dbx.files_upload(
+            f.read(), caminho_dropbox, mode=dropbox.files.WriteMode.overwrite
+        )
     print("✅ Upload concluído para o Dropbox!")
 
     # Tenta pegar link existente
