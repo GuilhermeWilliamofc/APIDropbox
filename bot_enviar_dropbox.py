@@ -128,7 +128,6 @@ def gerar_html_audios(input_txt, output_txt):
         ".album-content{padding-left:8px;border-left:2px solid #ddd}\n"
         ".track{margin:8px 0}\n"
         "</style>\n"
-        # incluir JSZip e FileSaver via CDN
         '<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.0/dist/jszip.min.js"></script>\n'
         '<script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>\n'
         "<script>\n"
@@ -186,7 +185,6 @@ def gerar_html_audios(input_txt, output_txt):
     for linha in linhas:
         if linha.startswith("#"):
             if artista_album is not None:
-                # fecha album-content e bloco
                 html_output.append("  </div>\n</div>\n\n")
             artista_album = linha[1:].strip()
             div_id = f"album{album_id}"
@@ -194,8 +192,8 @@ def gerar_html_audios(input_txt, output_txt):
             html_output.append(
                 f'<div class="album-block" data-album="{safe_album}">\n'
                 f'  <div class="album-row">\n'
-                f"    <button onclick=\"toggleAlbum(\\'{div_id}\\')\">Mostrar/Ocultar {safe_album}</button>\n"
-                f"    <button onclick=\"downloadAlbum(\\'{div_id}\\', this)\">Baixar álbum</button>\n"
+                f"    <button onclick=\"toggleAlbum('{div_id}')\">Mostrar/Ocultar {safe_album}</button>\n"
+                f"    <button onclick=\"downloadAlbum('{div_id}', this)\">Baixar álbum</button>\n"
                 f"  </div>\n"
                 f'  <div id="{div_id}" class="album-content" style="display:none;padding-left:8px;border-left:2px solid #ddd;margin-bottom:12px">\n'
                 f"    <h2>{safe_album}</h2>\n"
