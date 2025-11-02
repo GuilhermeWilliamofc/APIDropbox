@@ -127,8 +127,9 @@ def gerar_html_audios(input_txt, output_txt):
         ".album-block{margin-bottom:14px}\n"
         ".album-content{padding-left:8px;border-left:2px solid #ddd}\n"
         ".track{margin:8px 0}\n"
+        ".track a{margin-left:8px;font-size:90%}\n"
+        ".status{font-size:90%;color:#800;margin-left:8px}\n"
         "</style>\n"
-        # não carrega as libs imediatamente para evitar erro em file:// ou bloqueios — carregaremos dinamicamente quando necessário
         "<script>\n"
         "function loadScript(url){\n"
         "  return new Promise((resolve,reject)=>{\n"
@@ -137,7 +138,7 @@ def gerar_html_audios(input_txt, output_txt):
         "  });\n"
         "}\n\n"
         "function toggleAlbum(id) {\n"
-        "  const div = document.getElementById(id);\n"
+        "  const div = document.getElementById(id);\n        if(!div) return;\n"
         "  div.style.display = (div.style.display === 'none' || div.style.display==='') ? 'block' : 'none';\n"
         "}\n\n"
         "function filterAlbums() {\n"
@@ -155,39 +156,25 @@ def gerar_html_audios(input_txt, output_txt):
         "  try{ await Promise.all(promises); return (typeof JSZip !== 'undefined' && typeof saveAs !== 'undefined'); }\n"
         "  catch(e){ console.error('Erro carregando libs:', e); return false; }\n"
         "}\n\n"
+        "function setStatus(id, msg){\n"
+        "  const el = document.getElementById('status-'+id);\n"
+        "  if(el) el.textContent = msg;\n}\n\n"
         "async function downloadAlbum(id, btn) {\n"
-        "  btn = btn || this;\n"
-        "  const ok = await ensureLibs();\n"
-        "  if(!ok){ alert('Não foi possível carregar bibliotecas necessárias (JSZip/FileSaver). Verifique internet ou abra via servidor HTTP.'); return; }\n"
-        "  const div = document.getElementById(id);\n"
-        "  const tracks = Array.from(div.querySelectorAll('audio source')).map(s=>s.src).filter(Boolean);\n"
-        "  if(tracks.length===0){alert('Nenhuma faixa encontrada neste álbum.');return}\n"
-        "  if(!confirm('Baixar ' + tracks.length + ' arquivos como ZIP?')) return;\n"
+        "  btn = btn || this;\n  setStatus(id, 'Iniciando...');\n"
+        "  const ok = await ensureLibs();\n  if(!ok){ alert('Não foi possível carregar bibliotecas (JSZip/FileSaver). Abra via servidor HTTP ou verifique internet.'); setStatus(id,'Erro: libs não carregadas'); return; }\n"
+        "  const div = document.getElementById(id);\n  if(!div){ alert('Álbum não encontrado'); return; }\n  const sources = Array.from(div.querySelectorAll('audio source')).map((s,i)=>({url:s.src, idx:i+1})).filter(s=>s.url);\n  if(sources.length===0){ alert('Nenhuma faixa encontrada neste álbum.'); setStatus(id,'Nenhuma faixa'); return; }\n"
+        "  if(!confirm('Baixar ' + sources.length + ' arquivos como ZIP?')) { setStatus(id,'Cancelado pelo usuário'); return; }\n"
         "  btn.disabled = true; const originalText = btn.textContent; btn.textContent = 'Preparando...';\n"
-        "  const zip = new JSZip();\n"
-        "  for(let i=0;i<tracks.length;i++){\n"
-        "    const url = tracks[i];\n"
-        "    try{\n"
-        "      btn.textContent = `Baixando ${i+1}/${tracks.length}...`;\n"
-        "      const resp = await fetch(url);\n"
-        "      if(!resp.ok) throw new Error('Falha ao baixar: '+resp.status);\n"
-        "      const blob = await resp.blob();\n"
-        "      let name = url.split('/').pop().split('?')[0] || `track_${i+1}`;\n"
-        "      zip.file(name, blob);\n"
-        "    }catch(err){\n"
-        "      console.error('Erro fetch', url, err);\n"
-        "      // não interrompe o loop — registra e segue\n"
-        "    }\n"
-        "  }\n"
-        "  btn.textContent = 'Criando ZIP...';\n"
+        "  const zip = new JSZip();\n  let added = 0;\n  for(let i=0;i<sources.length;i++){\n"
+        "    const url = sources[i].url;\n    try{\n"
+        "      btn.textContent = `Baixando ${i+1}/${sources.length}...`;\n      console.log('fetch', url);\n"
+        "      const resp = await fetch(url);\n      if(!resp.ok){ console.error('fetch failed', url, resp.status); continue; }\n"
+        "      const blob = await resp.blob();\n        // ignora blobs vazios\n        if(!blob || blob.size===0){ console.warn('blob vazio', url); continue; }\n"
+        "      let name = url.split('/').pop().split('?')[0] || `track_${i+1}`;\n        name = decodeURIComponent(name);\n      zip.file(name, blob);\n      added++;\n    }catch(err){\n      console.error('Erro fetch', url, err);\n    }\n  }\n"
+        "  if(added===0){ alert('Nenhum arquivo foi baixado. Possível bloqueio por CORS ou links inválidos. Verifique no console.'); setStatus(id,'Falha: nenhum arquivo baixado'); btn.disabled=false; btn.textContent=originalText; return; }\n"
+        "  btn.textContent = 'Criando ZIP...'; setStatus(id,'Criando ZIP...');\n"
         "  try{\n"
-        "    const content = await zip.generateAsync({type:'blob'});\n"
-        "    saveAs(content, id + '.zip');\n"
-        "  }catch(err){\n"
-        "    console.error('Erro ao gerar ZIP', err); alert('Erro ao gerar ZIP: '+err);\n"
-        "  }\n"
-        "  btn.disabled = false; btn.textContent = originalText;\n"
-        "}\n</script>\n</head>\n<body>\n"
+        "    const content = await zip.generateAsync({type:'blob'});\n    saveAs(content, id + '.zip');\n    setStatus(id,'Download do ZIP iniciado');\n  }catch(err){\n    console.error('Erro ao gerar ZIP', err); alert('Erro ao gerar ZIP: '+err); setStatus(id,'Erro ao gerar ZIP');\n  }\n  btn.disabled = false; btn.textContent = originalText;\n}\n</script>\n</head>\n<body>\n"
         "<h1>Álbuns e Faixas</h1>\n"
         '<input id="search" type="search" placeholder="Buscar álbum..." oninput="filterAlbums()" style="width:100%;padding:8px;margin-bottom:12px">\n\n'
     ]
@@ -210,6 +197,7 @@ def gerar_html_audios(input_txt, output_txt):
                 f'  <div class="album-row">\n'
                 f"    <button onclick=\"toggleAlbum('{div_id}')\">Mostrar/Ocultar {safe_album}</button>\n"
                 f"    <button onclick=\"downloadAlbum('{div_id}', this)\">Baixar álbum</button>\n"
+                f'    <span id="status-{div_id}" class="status"></span>\n'
                 f"  </div>\n"
                 f'  <div id="{div_id}" class="album-content" style="display:none;padding-left:8px;border-left:2px solid #ddd;margin-bottom:12px">\n'
                 f"    <h2>{safe_album}</h2>\n"
@@ -231,11 +219,13 @@ def gerar_html_audios(input_txt, output_txt):
                 ext = ""
 
             safe_title = nome_arquivo.replace('"', "'")
+            # adiciona link direto para testar em nova aba e crossorigin no audio
             bloco_html = (
                 f'<div class="track" data-title="{safe_title}">\n'
-                f"  <p>{nome_arquivo}</p>\n"
-                f'  <audio controls preload="none">\n'
+                f'  <p>{nome_arquivo} <a href="{link}" target="_blank" rel="noopener noreferrer">abrir</a></p>\n'
+                f'  <audio controls preload="none" crossorigin="anonymous">\n'
                 f'    <source src="{link}" type="audio/{ext if ext else "mpeg"}">\n'
+                f"    Seu navegador não suporta o elemento de áudio.\n"
                 f"  </audio>\n"
                 f"</div>\n"
             )
