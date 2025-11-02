@@ -122,7 +122,10 @@ def gerar_html_audios(input_txt, output_txt):
         "<title>Links de Áudios</title>\n"
         "<style>\n"
         "body{font-family:Arial,Helvetica,sans-serif;padding:16px}\n"
-        "button{margin:6px 4px}\n        "
+        "button{margin:0;padding:8px 12px;border-radius:20px;border:2px solid #333;background:#f5f5f5}\n"
+        ".album-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}\n"
+        ".album-block{margin-bottom:14px}\n"
+        ".album-content{padding-left:8px;border-left:2px solid #ddd}\n"
         ".track{margin:8px 0}\n"
         "</style>\n"
         # incluir JSZip e FileSaver via CDN
@@ -131,13 +134,13 @@ def gerar_html_audios(input_txt, output_txt):
         "<script>\n"
         "function toggleAlbum(id) {\n"
         "  const div = document.getElementById(id);\n"
-        "  div.style.display = div.style.display === 'none' ? 'block' : 'none';\n"
+        "  div.style.display = (div.style.display === 'none' || div.style.display==='') ? 'block' : 'none';\n"
         "}\n\n"
-        "function filterTracks() {\n"
-        "  const q = document.getElementById('search').value.toLowerCase();\n"
-        "  document.querySelectorAll('.track').forEach(t => {\n"
-        "    const txt = t.dataset.title.toLowerCase();\n"
-        "    t.style.display = txt.includes(q) ? 'block' : 'none';\n"
+        "function filterAlbums() {\n"
+        "  const q = document.getElementById('search').value.toLowerCase().trim();\n"
+        "  document.querySelectorAll('.album-block').forEach(b => {\n"
+        "    const name = (b.dataset.album || '').toLowerCase();\n"
+        "    b.style.display = (!q || name.includes(q)) ? 'block' : 'none';\n"
         "  });\n"
         "}\n\n"
         "async function downloadAlbum(id, btn) {\n"
@@ -154,12 +157,11 @@ def gerar_html_audios(input_txt, output_txt):
         "      const resp = await fetch(url);\n"
         "      if(!resp.ok) throw new Error('Falha ao baixar: '+resp.status);\n"
         "      const blob = await resp.blob();\n"
-        "      // tenta extrair nome do arquivo da URL\n"
-        "      let name = url.split('/').pop().split('?')[0];\n"
-        "      if(!name) name = `track_${i+1}`;\n"
+        "      let name = url.split('/').pop().split('?')[0] || `track_${i+1}`;\n"
         "      zip.file(name, blob);\n"
         "    }catch(err){\n"
-        "      console.error('Erro fetch', url, err);\n      alert('Erro ao baixar alguns arquivos. Verifique CORS ou tente baixar manualmente.');\n"
+        "      console.error('Erro fetch', url, err);\n"
+        "      alert('Erro ao baixar alguns arquivos. Verifique CORS ou tente baixar manualmente.');\n"
         "    }\n"
         "  }\n"
         "  btn.textContent = 'Criando ZIP...';\n"
@@ -172,7 +174,7 @@ def gerar_html_audios(input_txt, output_txt):
         "  btn.disabled = false; btn.textContent = originalText;\n"
         "}\n</script>\n</head>\n<body>\n"
         "<h1>Álbuns e Faixas</h1>\n"
-        '<input id="search" type="search" placeholder="Buscar música..." oninput="filterTracks()" style="width:100%;padding:8px;margin-bottom:12px">\n\n'
+        '<input id="search" type="search" placeholder="Buscar álbum..." oninput="filterAlbums()" style="width:100%;padding:8px;margin-bottom:12px">\n\n'
     ]
     artista_album = None
     album_id = 1
@@ -184,14 +186,19 @@ def gerar_html_audios(input_txt, output_txt):
     for linha in linhas:
         if linha.startswith("#"):
             if artista_album is not None:
-                html_output.append("</div>\n\n")
+                # fecha album-content e bloco
+                html_output.append("  </div>\n</div>\n\n")
             artista_album = linha[1:].strip()
             div_id = f"album{album_id}"
+            safe_album = artista_album.replace('"', "'")
             html_output.append(
-                f"<button onclick=\"toggleAlbum('{div_id}')\">Mostrar/Ocultar {artista_album}</button>\n"
-                f"<button onclick=\"downloadAlbum('{div_id}', this)\">Baixar álbum</button>\n"
-                f'<div id="{div_id}" style="display:none;padding-left:8px;border-left:2px solid #ddd;margin-bottom:12px">\n'
-                f"<h2>{artista_album}</h2>\n"
+                f'<div class="album-block" data-album="{safe_album}">\n'
+                f'  <div class="album-row">\n'
+                f"    <button onclick=\"toggleAlbum(\\'{div_id}\\')\">Mostrar/Ocultar {safe_album}</button>\n"
+                f"    <button onclick=\"downloadAlbum(\\'{div_id}\\', this)\">Baixar álbum</button>\n"
+                f"  </div>\n"
+                f'  <div id="{div_id}" class="album-content" style="display:none;padding-left:8px;border-left:2px solid #ddd;margin-bottom:12px">\n'
+                f"    <h2>{safe_album}</h2>\n"
             )
             album_id += 1
             faixa_num = 1
@@ -222,7 +229,7 @@ def gerar_html_audios(input_txt, output_txt):
             faixa_num += 1
 
     if artista_album is not None:
-        html_output.append("</div>\n")
+        html_output.append("  </div>\n</div>\n")
 
     html_output.append("\n</body>\n</html>\n")
 
